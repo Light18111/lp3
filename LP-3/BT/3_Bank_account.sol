@@ -2,43 +2,72 @@
 pragma solidity >=0.8.0;
 
 contract BankAccount {
-    mapping(address => uint256) private balances;
-    mapping(address => bool) private isUser;
+    struct Account {
+        uint256 balance;
+        uint256 withdrawAmount; // user’s last withdrawal request
+        bool exists;
+    }
 
+    mapping(address => Account) private accounts;
+
+    event AccountCreated(address indexed user, uint256 initialDeposit);
     event Deposit(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 amount);
 
-    // Create account (optional initial deposit)
-    function createAccount() public payable {
-        require(!isUser[msg.sender], "Account already exists");
-        isUser[msg.sender] = true;
-        balances[msg.sender] = msg.value;
+    // ✅ Create new account with an initial deposit (logical, not ETH)
+    function createAccount(uint256 initialDeposit) public {
+        require(!accounts[msg.sender].exists, "Account already exists");
+
+        accounts[msg.sender] = Account({
+            balance: initialDeposit,
+            withdrawAmount: 0,
+            exists: true
+        });
+
+        emit AccountCreated(msg.sender, initialDeposit);
     }
 
-    // Deposit money
-    function deposit() public payable {
-        require(isUser[msg.sender], "Account not found");
-        require(msg.value > 0, "Deposit must be > 0");
-        balances[msg.sender] += msg.value;
-        emit Deposit(msg.sender, msg.value);
+    // ✅ Deposit funds (adds to logical balance)
+    function deposit(uint256 amount) public {
+        require(accounts[msg.sender].exists, "Account not found");
+        require(amount > 0, "Deposit must be > 0");
+
+        accounts[msg.sender].balance += amount;
+        emit Deposit(msg.sender, amount);
     }
 
-    // Withdraw money
+    // ✅ Withdraw funds (deducts from balance)
     function withdraw(uint256 amount) public {
-        require(isUser[msg.sender], "Account not found");
-        require(balances[msg.sender] >= amount, "Insufficient balance");
+        require(accounts[msg.sender].exists, "Account not found");
+        require(amount > 0, "Withdraw must be > 0");
+        require(amount <= accounts[msg.sender].balance, "Insufficient balance");
 
-        balances[msg.sender] -= amount;
-
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Withdrawal failed");
+        accounts[msg.sender].balance -= amount; // 💡 actually deducts balance
+        accounts[msg.sender].withdrawAmount = amount;
 
         emit Withdraw(msg.sender, amount);
     }
 
-    // Show your balance
+    // ✅ Show current balance
     function showBalance() public view returns (uint256) {
-        require(isUser[msg.sender], "Account not found");
-        return balances[msg.sender];
+        require(accounts[msg.sender].exists, "Account not found");
+        return accounts[msg.sender].balance;
     }
+
+    // ✅ Show last withdrawal amount
+    function getWithdrawAmount() public view returns (uint256) {
+        require(accounts[msg.sender].exists, "Account not found");
+        return accounts[msg.sender].withdrawAmount;
+    }
+
+    // ✅ Show both balance + last withdrawal
+    function getAccountDetails()
+        public
+        view
+        returns (uint256 balance, uint256 withdrawAmount)
+    {
+        require(accounts[msg.sender].exists, "Account not found");
+        Account storage acc = accounts[msg.sender];
+        return (acc.balance, acc.withdrawAmount);
+    }
 }
